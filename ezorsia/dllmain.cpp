@@ -115,6 +115,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 		HookSaveGlobal(true);
 		HookHpMpAlertRecv(true);
 		HookSelectCharMacFix(true);
+		HookFireArrowMultiTarget(true); //火焰箭 2101004 三箭三怪
+		HookFireArrowAttackRect(true); //火焰箭 2101004 攻击矩形高度(三箭三怪)
 		//Hook_get_unknown(true);
 		//Hook_get_resource_object(true); //helper function hooks  //ty teto for helping me get started
 		//Hook_com_ptr_t_IWzProperty__ctor(true);

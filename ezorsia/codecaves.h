@@ -1664,3 +1664,263 @@ __declspec(naked) void skillToolTipNew()
 		jmp skillToolTipNewRtn
 	}
 }
+
+// ===== 火焰箭 2101004 三箭三怪 =====
+// TryDoingShootAttack 0x9540EB: mov [ebp+1Ch], eax (将 FindHitMobInRect 返回的命中怪物数存入 a6)
+// 仅当技能ID==2101004(火焰箭)时，将命中怪物数限制为最大3，实现"三只箭攻击三只怪物"
+constexpr DWORD ccShootAttackTargetCountRtn = 0x00954165;	// 原 0x9540EE: jmp loc_954165 的目标
+__declspec(naked) void ccShootAttackLimitTargetCount()
+{
+	__asm {
+		// [ebp-0x10] 保存了当前技能ID (v240)
+		cmp dword ptr [ebp - 0x10], 2101004	// 技能ID == 2101004 (火焰箭)?
+		jne store_count
+		// eax = FindHitMobInRect 返回的命中怪物数
+		cmp eax, 3
+		jle store_count
+		mov eax, 3
+	store_count:
+		mov [ebp + 1Ch], eax	// 原指令: mov [ebp+1Ch], eax
+		jmp ccShootAttackTargetCountRtn
+	}
+}
+
+// ===== 火焰箭 2101004 三箭三怪 =====
+// TryDoingShootAttack 0x953F41: push [ebp+var_30] (v232=maxTarget入栈)
+// 仅当技能ID==2101004(火焰箭)时，将 FindHitMobInRect 的最大目标数改为3
+constexpr DWORD ccShootAttackMaxTargetRtn = 0x00953F4B;
+__declspec(naked) void ccShootAttackMaxTarget()
+{
+	__asm {
+		cmp dword ptr [ebp - 0x10], 2101004	// 技能ID == 2101004 (火焰箭)?
+		jne normal
+		push 3					// 最大目标数 = 3
+		jmp resume
+	normal:
+		push [ebp - 0x30]			// 原 v232 (maxTarget)
+	resume:
+		lea eax, [ebp - 0x148]		// 原 lea eax, [ebp+var_148]
+		push eax
+		jmp ccShootAttackMaxTargetRtn
+	}
+}
+
+// ===== 火焰箭2101004(法师魔法攻击) 三箭三怪 =====
+// TryDoingMagicAttack(0x950922) 0x951268: mov [ebp-0x1C], eax (v307 = maxTarget)
+// 火焰箭 maxTarget=1 → 单目标。CodeCave：技能ID==2101004 时强制 v307=3
+// 覆盖 0x951268 起 8 字节，恢复原 GetLevelData 调用后跳回 0x951270
+constexpr DWORD ccMagicAttackMaxTargetRtn = 0x00951270;
+__declspec(naked) void ccMagicAttackMaxTarget()
+{
+	__asm {
+		mov [ebp - 0x1C], eax		// 原指令: v307 = maxTarget
+		cmp dword ptr [ebp - 0x10], 2101004	// 技能ID == 2101004 (火焰箭)?
+		jne skip
+		mov dword ptr [ebp - 0x1C], 3	// v307 = 3
+	skip:
+		push dword ptr [ebp + 0xC]	// 恢复原 push [ebp+0xC] (GetLevelData参数)
+		mov ecx, [ebp + 8]		// 恢复原 mov ecx, [ebp+8] (this)
+		mov eax, 0x00760F23		// SKILLENTRY::GetLevelData
+		call eax			// 恢复原 call
+		jmp ccMagicAttackMaxTargetRtn	// 跳回 0x951270
+	}
+}
+
+// ===== 火焰箭2101004 三箭三怪 (最终修复: 扩大攻击矩形) =====
+// 覆盖 0x95127A 的 call sub_4144D4 (LABEL_155 路径, 矩形初始化):
+// 执行原调用后, 技能ID==2101004 时强制扩大矩形为 ±1000/±400 并 v307=3, 跳回 0x95127F
+constexpr DWORD ccFireArrowRectInitRtn = 0x0095127F;
+__declspec(naked) void ccFireArrowExpandRectInit()
+{
+	__asm {
+		mov eax, 0x004144D4		// sub_4144D4 (从技能数据复制矩形到 sAfterimageUOL)
+		call eax			// 原指令
+		cmp dword ptr [ebp - 0x10], 2101004	// 技能ID == 2101004 (火焰箭)?
+		jne resume
+		mov dword ptr [ebp - 0x6C], -1000	// sAfterimageUOL.left
+		mov dword ptr [ebp - 0x68], -400	// sAfterimageUOL.top
+		mov dword ptr [ebp - 0x64], 1000	// sAfterimageUOL.right
+		mov dword ptr [ebp - 0x60], 400	// sAfterimageUOL.bottom
+		mov dword ptr [ebp - 0x1C], 3		// v307 = 3 (FindHitMobInRect 最大目标数)
+	resume:
+		jmp ccFireArrowRectInitRtn
+	}
+}
+
+// 覆盖 0x95168E 的 call dword_BF0454 (LABEL_236 统一出口路径, 矩形平移到玩家位置):
+// 执行原调用后, 技能ID==2101004 时强制扩大矩形为 ±1000/±400 并 v307=3, 跳回 0x951694
+// 这覆盖了 0x95148B 分支 (v59<=1 时 v307=1 硬编码) 的情况 —— 火焰箭 maxTarget=1 走此分支时原逻辑 v307=1
+constexpr DWORD ccFireArrowRectMoveRtn = 0x00951694;
+__declspec(naked) void ccFireArrowExpandRectMove()
+{
+	__asm {
+		mov eax, dword ptr [0x00BF0454]	// 加载 dword_BF0454 函数指针
+		call eax			// dword_BF0454 (移动矩形到玩家位置, stdcall 2参数)
+		cmp dword ptr [ebp - 0x10], 2101004	// 技能ID == 2101004 (火焰箭)?
+		jne resume
+		mov dword ptr [ebp - 0x6C], -1000	// sAfterimageUOL.left
+		mov dword ptr [ebp - 0x68], -400	// sAfterimageUOL.top
+		mov dword ptr [ebp - 0x64], 1000	// sAfterimageUOL.right
+		mov dword ptr [ebp - 0x60], 400	// sAfterimageUOL.bottom
+		mov dword ptr [ebp - 0x1C], 3		// v307 = 3 (FindHitMobInRect 最大目标数)
+	resume:
+		jmp ccFireArrowRectMoveRtn
+	}
+}
+
+// ===== 火焰箭2101004 三箭三怪 (TryDoingMagicAttack 多目标白名单块方案 v2) =====
+// CodeCave A @ 0x955D0E: 白名单链入口(覆盖 cmp eax,2195ADh + jz 共11字节)
+// 火焰箭 2101004 强制跳多目标块 0x956372 (该块v188填充无E_POINTER检查, edi=this已确认安全)
+constexpr DWORD ccMagicWhitelistRtn = 0x00955D19;
+constexpr DWORD ccMagicMultiTarget = 0x00956372;
+__declspec(naked) void ccMagicFireArrowWhitelist()
+{
+	__asm {
+		cmp eax, 2101004		// 技能ID == 2101004 (火焰箭)?
+		jne normal
+		jmp ccMagicMultiTarget	// 进入多目标块(0x956372)
+	normal:
+		cmp eax, 0x2195AD		// 恢复原指令: 2201005
+		jnz not_2201005
+		jmp ccMagicMultiTarget
+	not_2201005:
+		jmp ccMagicWhitelistRtn	// 跳回白名单链继续(0x955D19)
+	}
+}
+
+// CodeCave B @ 0x9565A1: FindHitMobInRect 调用前(覆盖 mov ecx,dword_BEBFA4 + xor edi,edi 共8字节)
+// 火焰箭时强制 v207([ebp-0x90]) = 3 (FindHitMobInRect 最大目标数)
+constexpr DWORD ccMagicFindRectRtn = 0x009565A9;
+__declspec(naked) void ccMagicFireArrowFindRect()
+{
+	__asm {
+		mov eax, 0x00BEBFA4		// 加载 CMobPool 单例指针地址
+		mov ecx, [eax]			// this = *0xBEBFA4 (注意: MSVC 内联汇编 [0x00BEBFA4] 会编译成立即数! 必须两步)
+		cmp dword ptr [ebp - 0x14], 2101004	// v233 == 2101004 (火焰箭)?
+		jne normal
+		mov dword ptr [ebp - 0x90], 3	// v207 = 3 (最大目标数)
+	normal:
+		xor edi, edi			// 恢复原指令
+		jmp ccMagicFindRectRtn	// 跳回 0x9565A9
+	}
+}
+
+// CodeCave C @ 0x95656D: call dword_BF0454 矩形平移到玩家位置 (覆盖6字节)
+// 火焰箭时强制扩大攻击矩形 v219([ebp-0x58]) 为 ±1000/±400, 远处怪也能搜到
+// 注意: mov eax,[0xBF0454] 会被 MSVC 编译成立即数 → 必须用 mov eax,addr; call dword ptr [eax]
+constexpr DWORD ccMagicRectMove2Rtn = 0x00956573;
+__declspec(naked) void ccMagicFireArrowExpandRect()
+{
+	__asm {
+		cmp dword ptr [ebp - 0x14], 2101004	// v233 == 2101004 (火焰箭)?
+		je  expand_rect
+		cmp dword ptr [ebp - 0x14], 2301005	// v233 == 2301005 (圣箭术)?
+		jne normal
+	expand_rect:
+		// 只攻击角色正前方区域 (v218=[ebp-0x5C] 朝向: 0=朝右, 非0=朝左)
+		mov dword ptr [ebp - 0x54], -100	// v219.top (固定, 上下100)
+		mov dword ptr [ebp - 0x4C], 100	// v219.bottom (固定, 上下100)
+		cmp dword ptr [ebp - 0x5C], 0	// v218 == 0 (朝右)?
+		jne facing_left
+		mov dword ptr [ebp - 0x58], 0	// v219.left = 0 (右侧正前方)
+		mov dword ptr [ebp - 0x50], 200	// v219.right = 200 (左右200)
+		jmp normal
+	facing_left:
+		mov dword ptr [ebp - 0x58], -200	// v219.left = -200 (左侧正前方)
+		mov dword ptr [ebp - 0x50], 0	// v219.right = 0
+	normal:
+		mov eax, 0x00BF0454		// 加载 dword_BF0454 函数指针变量地址
+		call dword ptr [eax]	// 恢复原指令: dword_BF0454(&v219, x, y) 平移矩形到玩家位置
+		jmp ccMagicRectMove2Rtn	// 跳回 0x956573
+	}
+}
+
+// ===== 火焰箭2101004 三箭三怪 (单目标路径扩展 v2: 绝对矩形 + 正确参数) =====
+// @ 0x956313 (单目标路径 v227=1 赋值处, 覆盖7字节):
+// 火焰箭走单目标路径(保留 ball 飞行特效), 在攻击包构造前用 FindHitMobInRect 扩展最多3个目标
+// 关键: v219 在 0x955e5f 已被 dword_BF040C 初始化为【绝对矩形】(以玩家位置为中心)!
+//       绝不能覆盖成相对值, 否则 FindHitMobInRect 用相对矩形匹配绝对坐标怪物 → 返回0 → 不攻击
+// v220=[ebp-0x48] 玩家X(绝对), v219.top=[ebp-0x54]=玩家Y(绝对), v218=[ebp-0x5C]朝向
+// v188=[ebp-0xC30] 每目标152字节: 目标1=[ebp-0xC30], 目标2=[ebp-0xB98], 目标3=[ebp-0xB00]
+// 攻击包每目标字段: [0]=CMob*, [1]=sub_668AAD, [2]=GetCurrentAction, [3]=sub_7A5A58, [4]=伤害, [8]=标志, [12]=伤害
+constexpr DWORD ccExpandTargetsRtn = 0x0095631A;
+constexpr DWORD ccFindHitMobInRect = 0x00678476;
+__declspec(naked) void ccFireArrowExpandTargets()
+{
+	__asm {
+		cmp dword ptr [ebp - 0x14], 2101004	// v233 == 2101004 (火焰箭)?
+		je  expand_rect
+		cmp dword ptr [ebp - 0x14], 2301005	// v233 == 2301005 (圣箭术)?
+		jne normal
+	expand_rect:
+		// 三段伤害: v216([ebp-0x64]) = 技能数据偏移256的attackCount(火焰箭/圣箭术=1) → 强制3
+		// 后续伤害计算循环(0x956861)按 v216 计算并填充每目标伤害数组, 攻击包Encode1低4位自动=3
+		mov dword ptr [ebp - 0x64], 3	// v216 = 3 (每目标伤害段数)
+		// v219 已是绝对矩形(0x955e5f初始化): 在玩家位置基础上调整为 正前方200 x 上下100
+		mov eax, [ebp - 0x48]		// v220 = 玩家X (绝对)
+		mov edx, [ebp - 0x54]		// v219.top = 玩家Y (绝对)
+		// top/bottom: 玩家Y ±100 (基于 v219.top 已有绝对Y)
+		sub edx, 100			// top = 玩家Y - 100
+		mov dword ptr [ebp - 0x54], edx	// v219.top
+		add edx, 200			// bottom = 玩家Y + 100
+		mov dword ptr [ebp - 0x4C], edx	// v219.bottom
+		// left/right: 按朝向设正前方 ±200 (绝对坐标)
+		cmp dword ptr [ebp - 0x5C], 0	// v218 == 0 (朝右)?
+		jne facing_left
+		mov dword ptr [ebp - 0x58], eax	// v219.left = 玩家X (右侧正前方)
+		add eax, 200
+		mov dword ptr [ebp - 0x50], eax	// v219.right = 玩家X+200
+		jmp do_find
+	facing_left:
+		sub eax, 200
+		mov dword ptr [ebp - 0x58], eax	// v219.left = 玩家X-200 (左侧正前方)
+		mov eax, [ebp - 0x48]
+		mov dword ptr [ebp - 0x50], eax	// v219.right = 玩家X
+	do_find:
+		// FindHitMobInRect(this, &v219, &v195, 3, 0,0,0,0,0) — 与官方多目标块参数完全一致
+		// 压栈顺序(从右到左): arg9=0,arg8=0,arg7=0,arg6=0,arg5=0,arg4=3(maxTarget),arg3=&v195,arg2=&v219, this
+		xor eax, eax
+		push eax			// arg9 = 0
+		push eax			// arg8 = 0
+		push eax			// arg7 = 0
+		push eax			// arg6 = 0
+		push eax			// arg5 = 0
+		push 3			// arg4 = maxTarget = 3
+		lea eax, [ebp - 0x11C]		// &v195
+		push eax			// arg3 = &v195
+		lea eax, [ebp - 0x58]		// &v219
+		push eax			// arg2 = &v219
+		mov eax, 0x00BEBFA4		// CMobPool 单例指针地址
+		mov ecx, [eax]			// this (两步加载, 防 MSVC 立即数陷阱)
+		call ccFindHitMobInRect	// ret 0x20 自清理栈(8参数)
+		mov dword ptr [ebp - 0x2C], eax	// v227 = 找到的目标数
+		cmp eax, 1
+		jge multi			// >=1 个目标 → 扩展填充
+		// 兜底: FindHitMobInRect 没找到怪 → 保持 v227=1 (用 v188[0] 已锁定的 v234)
+		mov dword ptr [ebp - 0x2C], 1
+		jmp done
+	multi:
+		// 目标1: v188[0] = v195[0] (替换锁定目标, 3目标=v195[0/1/2] 不重复)
+		mov ecx, dword ptr [ebp - 0x11C]	// v195[0]
+		mov dword ptr [ebp - 0xC30], ecx	// v188[0+0].CMob* = v195[0]
+		// 目标2: v188[38] (偏移+0x98=[ebp-0xB98]) = v195[1]
+		mov ecx, dword ptr [ebp - 0x118]	// v195[1]
+		mov dword ptr [ebp - 0xB98], ecx	// v188[38+0].CMob* = v195[1]
+		mov dword ptr [ebp - 0xB88], 1	// v188[38+4].伤害 = 1
+		mov dword ptr [ebp - 0xB78], 1	// v188[38+8].标志 = 1
+		mov dword ptr [ebp - 0xB68], 1	// v188[38+12].伤害 = 1
+		cmp eax, 2
+		jle done			// 只有2个目标 → 跳回
+		// 目标3: v188[76] (偏移+0x130=[ebp-0xB00]) = v195[2]
+		mov ecx, dword ptr [ebp - 0x114]	// v195[2]
+		mov dword ptr [ebp - 0xB00], ecx	// v188[76+0].CMob* = v195[2]
+		mov dword ptr [ebp - 0xAF0], 1	// v188[76+4].伤害 = 1
+		mov dword ptr [ebp - 0xAE0], 1	// v188[76+8].标志 = 1
+		mov dword ptr [ebp - 0xAD0], 1	// v188[76+12].伤害 = 1
+	done:
+		jmp ccExpandTargetsRtn		// 跳回 0x95631A (v233==22171002 判断)
+	normal:
+		mov dword ptr [ebp - 0x2C], 1	// 恢复原指令: v227 = 1 (非火焰箭)
+		jmp ccExpandTargetsRtn
+	}
+}

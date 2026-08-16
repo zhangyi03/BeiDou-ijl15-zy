@@ -2204,3 +2204,32 @@ bool Hook_lpfn_NextLevel(bool bEnable)
 	return Memory::SetHook(bEnable, reinterpret_cast<void**>(&_lpfn_NextLevel), _lpfn_NextLevel_Hook);
 	//return Memory::SetHook(bEnable, reinterpret_cast<void**>(&_lpfn_NextLevel), _lpfn_NextLevel_v62_Hook);
 }
+
+// ===== 火焰箭 2101004 三箭三怪 =====
+// sub_766722: 判断技能是否为多目标范围技能(返回TRUE → TryDoingShootAttack 走 FindHitMobInRect 多目标搜索路径)
+// 火焰箭 2101004 原本不在多目标白名单 → 单目标。Hook 后强制其走多目标搜索，配合 CodeCave 限制命中3只。
+typedef BOOL(__cdecl* fn_IsMultiTargetSkill)(int skillId);
+static fn_IsMultiTargetSkill _IsMultiTargetSkill = reinterpret_cast<fn_IsMultiTargetSkill>(0x00766722);
+static fn_IsMultiTargetSkill _IsMultiTargetSkill_Hook = [](int skillId) -> BOOL {
+	if (skillId == 2101004) return TRUE;	// 火焰箭 → 强制多目标搜索
+	return _IsMultiTargetSkill(skillId);
+};
+
+bool HookFireArrowMultiTarget(bool bEnable)
+{
+	return Memory::SetHook(bEnable, reinterpret_cast<void**>(&_IsMultiTargetSkill), _IsMultiTargetSkill_Hook);
+}
+
+// sub_76664D: 返回攻击矩形扩展高度。火焰箭原本返回0 → 攻击矩形仅1像素高，多目标搜索扫不到怪。
+// Hook 后让火焰箭返回100，矩形上下各扩展100像素，配合 maxTarget=3 实现三箭三怪。
+typedef int(__cdecl* fn_GetAttackRectHeight)(int skillId);
+static fn_GetAttackRectHeight _GetAttackRectHeight = reinterpret_cast<fn_GetAttackRectHeight>(0x0076664D);
+static fn_GetAttackRectHeight _GetAttackRectHeight_Hook = [](int skillId) -> int {
+	if (skillId == 2101004) return 100;	// 火焰箭 → 扩展攻击矩形高度
+	return _GetAttackRectHeight(skillId);
+};
+
+bool HookFireArrowAttackRect(bool bEnable)
+{
+	return Memory::SetHook(bEnable, reinterpret_cast<void**>(&_GetAttackRectHeight), _GetAttackRectHeight_Hook);
+}

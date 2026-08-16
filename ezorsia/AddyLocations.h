@@ -447,3 +447,30 @@ const DWORD dwLoginFindIDBtn = 0x00620735;
 const DWORD dwLoginSaveIDBtn = 0x006206BE;
 const DWORD dwLoginWebHomeBtn = 0x006208A0;
 const DWORD dwLoginWebRegisterBtn = 0x00620829;
+
+// ===== 火焰箭 2101004 三箭三怪 =====
+// CUserLocal::TryDoingShootAttack 内调用 sub_766722 判断技能是否为多目标范围技能(返回TRUE走FindHitMobInRect多目标搜索)
+const DWORD dwIsMultiTargetSkill = 0x00766722;
+// TryDoingShootAttack 内 0x9540EB: mov [ebp+1Ch], eax 将 FindHitMobInRect 返回的命中怪物数存入 a6
+const DWORD dwShootAttackTargetCount = 0x009540EB;
+const DWORD dwShootAttackTargetCountRtn = 0x009540F0;
+// 攻击矩形高度函数 sub_76664D (返回矩形扩展高度，火焰箭原本返回0 → 矩形仅1像素高)
+const DWORD dwAttackRectHeight = 0x0076664D;
+// TryDoingShootAttack 0x953F41: push [ebp+var_30] (v232=maxTarget入栈) → CodeCave 改为 push 3
+const DWORD dwShootAttackMaxTarget = 0x00953F41;
+const DWORD dwShootAttackMaxTargetRtn = 0x00953F4B;
+// ===== 火焰箭2101004 三箭三怪 (多目标白名单块方案 v2) =====
+const DWORD dwMagicWhitelist = 0x00955D0E;    // 白名单链入口 (火焰箭强制跳0x956372)
+const DWORD dwMagicWhitelistRtn = 0x00955D19;
+const DWORD dwMagicMultiTarget = 0x00956372;  // 多目标处理块入口
+const DWORD dwMagicFindRect = 0x009565A1;     // FindHitMobInRect 调用前 (v207强制3)
+const DWORD dwMagicFindRectRtn = 0x009565A9;
+
+// 3. 0x95656D: call dword_BF0454 (v219矩形平移到玩家位置) → 火焰箭强制扩大矩形 ±1000/±400
+const DWORD dwMagicRectMove2 = 0x0095656D;
+const DWORD dwMagicRectMove2Rtn = 0x00956573;
+const DWORD dwBF0454 = 0x00BF0454;
+
+// ===== 火焰箭2101004 三箭三怪 (单目标路径扩展) =====
+const DWORD dwExpandTargets = 0x00956313;    // 单目标路径 v227=1 赋值处 (覆盖7字节)
+const DWORD dwExpandTargetsRtn = 0x0095631A;

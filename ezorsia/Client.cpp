@@ -950,6 +950,10 @@ void Client::MoreHook() {
 	// 窗口保存位置
 	Memory::WriteInt(0x0049D218 + 1, m_nGameWidth - 16);// 窗口保存位置边界 x
 	Memory::WriteInt(0x0049D268 + 1, m_nGameHeight - 16);// 窗口保存位置边界 y
+
+	// ===== 火焰箭 2101004 三箭三怪 (单目标路径扩展, 保留箭矢飞行动画) =====
+	// 0x956313 (v227=1 赋值处): 火焰箭走单目标路径保留ball动画, 攻击包扩展最多3目标
+	Memory::CodeCave(ccFireArrowExpandTargets, dwExpandTargets, 7);
 }
 
 void Client::WorldMap()
