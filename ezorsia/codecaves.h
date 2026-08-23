@@ -1858,22 +1858,22 @@ __declspec(naked) void ccFireArrowExpandTargets()
 		mov dword ptr [ebp - 0x64], 3	// v216 = 3 (每目标伤害段数)
 		// v219 已是绝对矩形(0x955e5f初始化): 在玩家位置基础上调整为 正前方200 x 上下100
 		mov eax, [ebp - 0x48]		// v220 = 玩家X (绝对)
-		mov edx, [ebp - 0x54]		// v219.top = 玩家Y (绝对)
-		// top/bottom: 玩家Y ±100 (基于 v219.top 已有绝对Y)
-		sub edx, 100			// top = 玩家Y - 100
+		mov edx, [ebp - 0x44]		// v221 = 玩家Y - 28 (角色高度偏移)
+		// top/bottom: 以玩家Y为中心 ±100 (上下各100px, 对称)
+		sub edx, 72			// top = 玩家Y - 100 (v221-72 = 玩家Y-100)
 		mov dword ptr [ebp - 0x54], edx	// v219.top
-		add edx, 200			// bottom = 玩家Y + 100
+		add edx, 200			// bottom = 玩家Y + 100 (v221+128 = 玩家Y+100)
 		mov dword ptr [ebp - 0x4C], edx	// v219.bottom
-		// left/right: 按朝向设正前方 ±200 (绝对坐标)
+		// left/right: 按朝向设正前方 300 (绝对坐标)
 		cmp dword ptr [ebp - 0x5C], 0	// v218 == 0 (朝右)?
 		jne facing_left
 		mov dword ptr [ebp - 0x58], eax	// v219.left = 玩家X (右侧正前方)
-		add eax, 200
-		mov dword ptr [ebp - 0x50], eax	// v219.right = 玩家X+200
+		add eax, 300
+		mov dword ptr [ebp - 0x50], eax	// v219.right = 玩家X+300 (中心在正前方150)
 		jmp do_find
 	facing_left:
-		sub eax, 200
-		mov dword ptr [ebp - 0x58], eax	// v219.left = 玩家X-200 (左侧正前方)
+		sub eax, 300
+		mov dword ptr [ebp - 0x58], eax	// v219.left = 玩家X-300 (左侧正前方, 中心在正前方150)
 		mov eax, [ebp - 0x48]
 		mov dword ptr [ebp - 0x50], eax	// v219.right = 玩家X
 	do_find:
